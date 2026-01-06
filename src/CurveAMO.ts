@@ -2,21 +2,31 @@ import { assert } from "node:console";
 import { CurveStableSwapNG } from "./CurveStableSwapNG"
 import { DEFAULT_PEG_MAX, DEFAULT_PEG_MIN } from "./helpers";
 
+type PriceOutput = {
+  currentPrice: bigint
+  targetPrice: bigint
+  achievablePrice: bigint // if achievable = target -> solved, if not, partially solved
+}
+
 export default class CurveAMO extends CurveStableSwapNG {
-    /**
+  /**
    * Solves for the amount of tokens to swap to bring price to target.
    * Automatically determines direction based on current vs target price.
    *
    * @param targetCoinKPerCoin0 - target price as "coinK per coin0" (1e18 scaled)
-   * @param maxDx - maximum swap amount to search within
+   * @param maxDx - maximum swap amount to search within (required for binary search)
    * @param coinKIndex - which coin to measure price against (default 1)
-   * @returns { dx, iIn, jOut } - amount to swap and direction
+   * @returns dx - amount to swap (maxDx if target unreachable)
+   * @returns iIn - input coin index for the swap
+   * @returns jOut - output coin index for the swap
+   * @returns canFulfill - true if target price is achievable within maxDx
+   * @returns priceOutput - { currentPrice, targetPrice, achievablePrice } for analyzing partial solutions
    */
   solveDxToTargetPrice(
     targetCoinKPerCoin0: bigint,
     maxDx: bigint,
     coinKIndex = 1,
-  ): { dx: bigint; iIn: number; jOut: number } {
+  ): { dx: bigint; iIn: number; jOut: number , canFulfill: boolean, priceOutput: PriceOutput} {
     assert(coinKIndex !== 0, "coinKIndex must not be 0");
     const target = targetCoinKPerCoin0;
 
@@ -25,7 +35,7 @@ export default class CurveAMO extends CurveStableSwapNG {
 
     // Already at target
     if (price === target) {
-      return { dx: 0n, iIn: 0, jOut: coinKIndex };
+      return { dx: 0n, iIn: 0, jOut: coinKIndex, canFulfill: true,  priceOutput: {currentPrice: price, targetPrice: price, achievablePrice: target}};
     }
 
     // Determine direction:
@@ -60,11 +70,13 @@ export default class CurveAMO extends CurveStableSwapNG {
 
     if (hi > maxDx) {
       const maxPrice = postPrice(maxDx);
+      // uppeg cannot be fixed with the current LP max
       if (needToLowerPrice && maxPrice > target) {
-        throw new Error(`Target price not reachable within maxDx (current: ${price}, target: ${target}, max achievable: ${maxPrice})`);
+        return {iIn, jOut, dx: maxDx, canFulfill: false, priceOutput: {currentPrice: price, targetPrice: target, achievablePrice: maxPrice, }};
       }
+      // depeg cannot be fixed with the current LP max
       if (!needToLowerPrice && maxPrice < target) {
-        throw new Error(`Target price not reachable within maxDx (current: ${price}, target: ${target}, max achievable: ${maxPrice})`);
+        return {iIn, jOut, dx: maxDx, canFulfill: false, priceOutput: {currentPrice: price, targetPrice: target, achievablePrice: maxPrice, }};
       }
       hi = maxDx;
     }
@@ -85,7 +97,7 @@ export default class CurveAMO extends CurveStableSwapNG {
       }
     }
 
-    return { dx: lo, iIn, jOut };
+    return { dx: lo, iIn, jOut, canFulfill: true, priceOutput: {currentPrice: price, targetPrice: target, achievablePrice: target}};
   }
 
   /**
@@ -95,13 +107,16 @@ export default class CurveAMO extends CurveStableSwapNG {
    * @param targetCoinKPerCoin0 - target price as "coinK per coin0" (1e18 scaled)
    * @param maxAmount - maximum amount to search within
    * @param coinKIndex - which coin to measure price against (default 1)
-   * @returns { amount, coinIndex } - amount to add and which coin
+   * @returns amount - amount to add (maxAmount if target unreachable)
+   * @returns coinIndex - which coin to add
+   * @returns canFulfill - true if target price is achievable within maxAmount
+   * @returns priceOutput - { currentPrice, targetPrice, achievablePrice } for analyzing partial solutions
    */
   solveOneSidedAddToTargetPrice(
     targetCoinKPerCoin0: bigint,
     maxAmount: bigint,
     coinKIndex = 1,
-  ): { amount: bigint; coinIndex: number } {
+  ): { amount: bigint; coinIndex: number, canFulfill: boolean, priceOutput: {currentPrice: bigint, targetPrice: bigint, achievablePrice: bigint}} {
     assert(coinKIndex !== 0, "coinKIndex must not be 0");
     const target = targetCoinKPerCoin0;
 
@@ -110,7 +125,7 @@ export default class CurveAMO extends CurveStableSwapNG {
 
     // Already at target
     if (price === target) {
-      return { amount: 0n, coinIndex: 0 };
+      return { amount: 0n, coinIndex: 0, canFulfill: true, priceOutput: {currentPrice: price, targetPrice: target, achievablePrice: target} };
     }
 
     // Determine which coin to add:
@@ -147,10 +162,10 @@ export default class CurveAMO extends CurveStableSwapNG {
     if (hi > maxAmount) {
       const maxPrice = postPrice(maxAmount);
       if (needToLowerPrice && maxPrice > target) {
-        throw new Error(`Target price not reachable within maxAmount (current: ${price}, target: ${target}, max achievable: ${maxPrice})`);
+        return {amount: maxAmount, coinIndex, canFulfill: false, priceOutput: {achievablePrice: maxPrice, currentPrice: price, targetPrice: target}}
       }
       if (!needToLowerPrice && maxPrice < target) {
-        throw new Error(`Target price not reachable within maxAmount (current: ${price}, target: ${target}, max achievable: ${maxPrice})`);
+        return {amount: maxAmount, coinIndex, canFulfill: false, priceOutput: {achievablePrice: maxPrice, currentPrice: price, targetPrice: target}}
       }
       hi = maxAmount;
     }
@@ -169,7 +184,7 @@ export default class CurveAMO extends CurveStableSwapNG {
       }
     }
 
-    return { amount: lo, coinIndex };
+    return { amount: lo, coinIndex, canFulfill: true, priceOutput: {currentPrice: price, targetPrice: target, achievablePrice: target}};
   }
 
   /**
@@ -179,13 +194,17 @@ export default class CurveAMO extends CurveStableSwapNG {
    * @param targetCoinKPerCoin0 - target price as "coinK per coin0" (1e18 scaled)
    * @param maxBurnAmount - maximum LP tokens to burn (defaults to total supply)
    * @param coinKIndex - which coin to measure price against (default 1)
-   * @returns { burnAmount, coinIndex, tokenOut } - LP to burn, which coin to withdraw, expected tokens out
+   * @returns burnAmount - LP tokens to burn (maxBurnAmount if target unreachable)
+   * @returns coinIndex - which coin to withdraw
+   * @returns tokenOut - expected tokens received
+   * @returns canFulfill - true if target price is achievable within maxBurnAmount
+   * @returns priceOutput - { currentPrice, targetPrice, achievablePrice } for analyzing partial solutions
    */
   solveOneSidedRemoveToTargetPrice(
     targetCoinKPerCoin0: bigint,
     maxBurnAmount?: bigint,
     coinKIndex = 1,
-  ): { burnAmount: bigint; coinIndex: number; tokenOut: bigint } {
+  ): { burnAmount: bigint; coinIndex: number; tokenOut: bigint, canFulfill: boolean, priceOutput: PriceOutput } {
     assert(coinKIndex !== 0, "coinKIndex must not be 0");
     const target = targetCoinKPerCoin0;
     const maxBurn = maxBurnAmount ?? this.totalSupply;
@@ -195,7 +214,7 @@ export default class CurveAMO extends CurveStableSwapNG {
 
     // Already at target
     if (price === target) {
-      return { burnAmount: 0n, coinIndex: 0, tokenOut: 0n };
+      return { burnAmount: 0n, coinIndex: 0, tokenOut: 0n, canFulfill: true, priceOutput: { currentPrice: price,  targetPrice: target, achievablePrice: price }};
     }
 
     // Determine which coin to remove:
@@ -230,10 +249,12 @@ export default class CurveAMO extends CurveStableSwapNG {
     if (hi > maxBurn) {
       const maxPrice = postPrice(maxBurn);
       if (needToLowerPrice && maxPrice > target) {
-        throw new Error(`Target price not reachable within maxBurnAmount (current: ${price}, target: ${target}, max achievable: ${maxPrice})`);
+        const tokenOut = this.calcWithdrawOneCoin(maxBurn, coinIndex);
+        return {burnAmount: maxBurn, coinIndex, tokenOut, canFulfill: false, priceOutput: {currentPrice: price, targetPrice: target, achievablePrice: maxPrice}}
       }
       if (!needToLowerPrice && maxPrice < target) {
-        throw new Error(`Target price not reachable within maxBurnAmount (current: ${price}, target: ${target}, max achievable: ${maxPrice})`);
+        const tokenOut = this.calcWithdrawOneCoin(maxBurn, coinIndex);
+        return {burnAmount: maxBurn, coinIndex, tokenOut, canFulfill: false, priceOutput: {currentPrice: price, targetPrice: target, achievablePrice: maxPrice}}
       }
       hi = maxBurn;
     }
@@ -255,7 +276,7 @@ export default class CurveAMO extends CurveStableSwapNG {
     // Calculate expected token output
     const tokenOut = this.calcWithdrawOneCoin(lo, coinIndex);
 
-    return { burnAmount: lo, coinIndex, tokenOut };
+    return { burnAmount: lo, coinIndex, tokenOut, canFulfill: true, priceOutput: {currentPrice: price, targetPrice: target, achievablePrice: target} };
   }
 
 
