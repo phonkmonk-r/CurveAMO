@@ -1,5 +1,5 @@
 import { assert } from "node:console";
-import { CurveStableSwapNG } from "./CurveStableSwapNG"
+import { CurveStableSwapNG, CurveStableSwapNGParams } from "./CurveStableSwapNG"
 import { DEFAULT_PEG_MAX, DEFAULT_PEG_MIN } from "./helpers";
 
 type PriceOutput = {
@@ -290,7 +290,7 @@ export default class CurveAMO extends CurveStableSwapNG {
    * @param pegMin - minimum acceptable price (1e18 scaled), default 0.998
    * @param pegMax - maximum acceptable price (1e18 scaled), default 1.005
    * @param coinKIndex - which coin to measure price against (default 1)
-   * @returns { maxDx, constrained, priceAfter } - max swappable amount, whether it was constrained, resulting price
+   * @returns { maxDx, dy, constrained, priceAfter } - max swappable amount, amount out, whether it was constrained, resulting price
    */
   maxSwapWithinPeg(
     desiredDx: bigint,
@@ -299,25 +299,25 @@ export default class CurveAMO extends CurveStableSwapNG {
     pegMin: bigint = DEFAULT_PEG_MIN,
     pegMax: bigint = DEFAULT_PEG_MAX,
     coinKIndex = 1,
-  ): { maxDx: bigint; constrained: boolean; priceAfter: bigint } {
+  ): { maxDx: bigint; dy: bigint; constrained: boolean; priceAfter: bigint } {
     assert(coinKIndex !== 0, "coinKIndex must not be 0");
 
     const currentPrice = (): bigint => this.priceCoin0ToK_1e18(coinKIndex);
 
-    const postPrice = (dx: bigint): bigint => {
+    const postPriceAndDy = (dx: bigint): { price: bigint; dy: bigint } => {
       const snap = this.snapshot();
       try {
-        this.exchange(iIn, jOut, dx);
-        return currentPrice();
+        const dy = this.exchange(iIn, jOut, dx);
+        return { price: currentPrice(), dy };
       } finally {
         this.restore(snap);
       }
     };
 
     // Check if desired amount is within peg
-    const priceAtDesired = postPrice(desiredDx);
-    if (priceAtDesired >= pegMin && priceAtDesired <= pegMax) {
-      return { maxDx: desiredDx, constrained: false, priceAfter: priceAtDesired };
+    const resultAtDesired = postPriceAndDy(desiredDx);
+    if (resultAtDesired.price >= pegMin && resultAtDesired.price <= pegMax) {
+      return { maxDx: desiredDx, dy: resultAtDesired.dy, constrained: false, priceAfter: resultAtDesired.price };
     }
 
     // Binary search for max dx that keeps price within bounds
@@ -326,9 +326,9 @@ export default class CurveAMO extends CurveStableSwapNG {
 
     while (lo < hi) {
       const mid = (lo + hi + 1n) / 2n; // Bias high to find maximum
-      const midPrice = postPrice(mid);
+      const midResult = postPriceAndDy(mid);
 
-      const withinPeg = midPrice >= pegMin && midPrice <= pegMax;
+      const withinPeg = midResult.price >= pegMin && midResult.price <= pegMax;
       if (withinPeg) {
         lo = mid; // Can go higher
       } else {
@@ -336,8 +336,8 @@ export default class CurveAMO extends CurveStableSwapNG {
       }
     }
 
-    const finalPrice = lo > 0n ? postPrice(lo) : currentPrice();
-    return { maxDx: lo, constrained: true, priceAfter: finalPrice };
+    const finalResult = lo > 0n ? postPriceAndDy(lo) : { price: currentPrice(), dy: 0n };
+    return { maxDx: lo, dy: finalResult.dy, constrained: true, priceAfter: finalResult.price };
   }
 
   /**
@@ -454,5 +454,404 @@ export default class CurveAMO extends CurveStableSwapNG {
 
     const finalResult = lo > 0n ? postPriceAndOut(lo) : { price: currentPrice(), out: 0n };
     return { maxBurnAmount: lo, constrained: true, priceAfter: finalResult.price, tokenOut: finalResult.out };
+  }
+
+  /**
+   * Given a desired output amount (dy), returns the required input (dx) and whether
+   * price constraints can be satisfied. If the desired output would push price outside
+   * the peg range, returns the maximum achievable output within constraints.
+   *
+   * @param desiredDy - the output amount you want to receive
+   * @param iIn - input coin index
+   * @param jOut - output coin index
+   * @param pegMin - minimum acceptable price (1e18 scaled), default 0.998
+   * @param pegMax - maximum acceptable price (1e18 scaled), default 1.005
+   * @param coinKIndex - which coin to measure price against (default 1)
+   * @param maxDx - optional maximum input amount available (speeds up search)
+   * @returns dx - input required for the achievable output
+   * @returns dy - actual output you'll get (desiredDy if achievable, otherwise max within peg)
+   * @returns canFulfill - true if desiredDy is fully achievable within peg constraints
+   * @returns maxDyWithinPeg - maximum output achievable while staying within peg range
+   * @returns priceAfter - resulting price after the swap
+   */
+  solveSwapForOutput(
+    desiredDy: bigint,
+    iIn: number,
+    jOut: number,
+    pegMin: bigint = DEFAULT_PEG_MIN,
+    pegMax: bigint = DEFAULT_PEG_MAX,
+    coinKIndex = 1,
+    maxDx?: bigint,
+  ): { dx: bigint; dy: bigint; canFulfill: boolean; maxDyWithinPeg: bigint; priceAfter: bigint } {
+    assert(coinKIndex !== 0, "coinKIndex must not be 0");
+    assert(desiredDy > 0n, "desiredDy must be > 0");
+
+    const currentPrice = (): bigint => this.priceCoin0ToK_1e18(coinKIndex);
+    const maxInput = maxDx ?? 10n ** 30n;
+
+    // Helper to get price and dx for a given dy
+    const getPriceAndDxForDy = (dy: bigint): { price: bigint; dx: bigint } | null => {
+      const snap = this.snapshot();
+      try {
+        // Binary search for dx that gives us dy
+        let lo = 1n;
+        let hi = 1n;
+
+        // Expand hi until we get enough output
+        while (hi <= maxInput && this.getDy(iIn, jOut, hi) < dy) {
+          hi *= 2n;
+        }
+
+        // Check if we exceeded maxInput
+        if (hi > maxInput) {
+          if (this.getDy(iIn, jOut, maxInput) < dy) return null;
+          hi = maxInput;
+        }
+
+        // Binary search for minimum dx that gives dy
+        while (lo < hi) {
+          const mid = (lo + hi) / 2n;
+          if (this.getDy(iIn, jOut, mid) >= dy) hi = mid;
+          else lo = mid + 1n;
+        }
+
+        const dx = lo;
+        this.exchange(iIn, jOut, dx);
+        return { price: currentPrice(), dx };
+      } catch {
+        return null;
+      } finally {
+        this.restore(snap);
+      }
+    };
+
+    // Check if desired dy is achievable and within peg
+    const resultAtDesired = getPriceAndDxForDy(desiredDy);
+
+    if (resultAtDesired && resultAtDesired.price >= pegMin && resultAtDesired.price <= pegMax) {
+      // Fully achievable within peg
+      return {
+        dx: resultAtDesired.dx,
+        dy: desiredDy,
+        canFulfill: true,
+        maxDyWithinPeg: desiredDy,
+        priceAfter: resultAtDesired.price,
+      };
+    }
+
+    // Binary search for max dy within peg constraints
+    let lo = 1n;
+    let hi = desiredDy;
+
+    // First check if even the smallest dy is within peg
+    const minResult = getPriceAndDxForDy(lo);
+    if (!minResult || minResult.price < pegMin || minResult.price > pegMax) {
+      // Even minimal swap breaks peg or is not possible
+      return {
+        dx: 0n,
+        dy: 0n,
+        canFulfill: false,
+        maxDyWithinPeg: 0n,
+        priceAfter: currentPrice(),
+      };
+    }
+
+    // Binary search for maximum dy within peg
+    while (lo < hi) {
+      const mid = (lo + hi + 1n) / 2n; // Bias high to find maximum
+      const midResult = getPriceAndDxForDy(mid);
+
+      if (midResult && midResult.price >= pegMin && midResult.price <= pegMax) {
+        lo = mid; // Can go higher
+      } else {
+        hi = mid - 1n; // Too much
+      }
+    }
+
+    const finalResult = getPriceAndDxForDy(lo);
+    if (!finalResult) {
+      return {
+        dx: 0n,
+        dy: 0n,
+        canFulfill: false,
+        maxDyWithinPeg: 0n,
+        priceAfter: currentPrice(),
+      };
+    }
+
+    return {
+      dx: finalResult.dx,
+      dy: lo,
+      canFulfill: false,
+      maxDyWithinPeg: lo,
+      priceAfter: finalResult.price,
+    };
+  }
+
+  /**
+   * Given a desired LP token output, returns the required single-sided deposit amount
+   * and whether price constraints can be satisfied.
+   *
+   * @param desiredLpTokens - the LP tokens you want to receive
+   * @param coinIndex - which coin to add
+   * @param pegMin - minimum acceptable price (1e18 scaled), default 0.998
+   * @param pegMax - maximum acceptable price (1e18 scaled), default 1.005
+   * @param coinKIndex - which coin to measure price against (default 1)
+   * @param maxAmount - optional maximum amount available to deposit (speeds up search)
+   * @returns amount - input amount required for the achievable LP tokens
+   * @returns lpTokens - actual LP tokens you'll get
+   * @returns canFulfill - true if desiredLpTokens is fully achievable within peg constraints
+   * @returns maxLpWithinPeg - maximum LP tokens achievable while staying within peg range
+   * @returns priceAfter - resulting price after adding liquidity
+   */
+  solveAddLiquidityForLpTokens(
+    desiredLpTokens: bigint,
+    coinIndex: number,
+    pegMin: bigint = DEFAULT_PEG_MIN,
+    pegMax: bigint = DEFAULT_PEG_MAX,
+    coinKIndex = 1,
+    maxAmount?: bigint,
+  ): { amount: bigint; lpTokens: bigint; canFulfill: boolean; maxLpWithinPeg: bigint; priceAfter: bigint } {
+    assert(coinKIndex !== 0, "coinKIndex must not be 0");
+    assert(desiredLpTokens > 0n, "desiredLpTokens must be > 0");
+
+    const currentPrice = (): bigint => this.priceCoin0ToK_1e18(coinKIndex);
+    const maxInput = maxAmount ?? 10n ** 30n;
+
+    // Helper to get price and amount for desired LP tokens
+    const getPriceAndAmountForLp = (targetLp: bigint): { price: bigint; amount: bigint; actualLp: bigint } | null => {
+      const snap = this.snapshot();
+      try {
+        // Binary search for amount that gives us targetLp
+        let lo = 1n;
+        let hi = 1n;
+
+        const getLpForAmount = (amt: bigint): bigint => {
+          const amounts = new Array(this.p.n).fill(0n);
+          amounts[coinIndex] = amt;
+          const s = this.snapshot();
+          try {
+            return this.addLiquidity(amounts);
+          } finally {
+            this.restore(s);
+          }
+        };
+
+        // Expand hi until we get enough LP
+        while (hi <= maxInput && getLpForAmount(hi) < targetLp) {
+          hi *= 2n;
+        }
+
+        // Check if we exceeded maxInput
+        if (hi > maxInput) {
+          if (getLpForAmount(maxInput) < targetLp) return null;
+          hi = maxInput;
+        }
+
+        // Binary search for minimum amount that gives targetLp
+        while (lo < hi) {
+          const mid = (lo + hi) / 2n;
+          if (getLpForAmount(mid) >= targetLp) hi = mid;
+          else lo = mid + 1n;
+        }
+
+        const amount = lo;
+        const amounts = new Array(this.p.n).fill(0n);
+        amounts[coinIndex] = amount;
+        const actualLp = this.addLiquidity(amounts);
+        return { price: currentPrice(), amount, actualLp };
+      } catch {
+        return null;
+      } finally {
+        this.restore(snap);
+      }
+    };
+
+    // Check if desired LP is achievable and within peg
+    const resultAtDesired = getPriceAndAmountForLp(desiredLpTokens);
+
+    if (resultAtDesired && resultAtDesired.price >= pegMin && resultAtDesired.price <= pegMax) {
+      return {
+        amount: resultAtDesired.amount,
+        lpTokens: resultAtDesired.actualLp,
+        canFulfill: true,
+        maxLpWithinPeg: resultAtDesired.actualLp,
+        priceAfter: resultAtDesired.price,
+      };
+    }
+
+    // Binary search for max LP within peg constraints
+    let lo = 1n;
+    let hi = desiredLpTokens;
+
+    const minResult = getPriceAndAmountForLp(lo);
+    if (!minResult || minResult.price < pegMin || minResult.price > pegMax) {
+      return {
+        amount: 0n,
+        lpTokens: 0n,
+        canFulfill: false,
+        maxLpWithinPeg: 0n,
+        priceAfter: currentPrice(),
+      };
+    }
+
+    while (lo < hi) {
+      const mid = (lo + hi + 1n) / 2n;
+      const midResult = getPriceAndAmountForLp(mid);
+
+      if (midResult && midResult.price >= pegMin && midResult.price <= pegMax) {
+        lo = mid;
+      } else {
+        hi = mid - 1n;
+      }
+    }
+
+    const finalResult = getPriceAndAmountForLp(lo);
+    if (!finalResult) {
+      return {
+        amount: 0n,
+        lpTokens: 0n,
+        canFulfill: false,
+        maxLpWithinPeg: 0n,
+        priceAfter: currentPrice(),
+      };
+    }
+
+    return {
+      amount: finalResult.amount,
+      lpTokens: finalResult.actualLp,
+      canFulfill: false,
+      maxLpWithinPeg: finalResult.actualLp,
+      priceAfter: finalResult.price,
+    };
+  }
+
+  /**
+   * Given a desired token output from removing liquidity, returns the required LP burn amount
+   * and whether price constraints can be satisfied.
+   *
+   * @param desiredTokenOut - the token amount you want to receive
+   * @param coinIndex - which coin to withdraw
+   * @param pegMin - minimum acceptable price (1e18 scaled), default 0.998
+   * @param pegMax - maximum acceptable price (1e18 scaled), default 1.005
+   * @param coinKIndex - which coin to measure price against (default 1)
+   * @param maxBurnAmount - optional maximum LP tokens available to burn (speeds up search, defaults to totalSupply)
+   * @returns burnAmount - LP tokens to burn for the achievable output
+   * @returns tokenOut - actual tokens you'll get
+   * @returns canFulfill - true if desiredTokenOut is fully achievable within peg constraints
+   * @returns maxTokenOutWithinPeg - maximum tokens achievable while staying within peg range
+   * @returns priceAfter - resulting price after removing liquidity
+   */
+  solveRemoveLiquidityForTokenOut(
+    desiredTokenOut: bigint,
+    coinIndex: number,
+    pegMin: bigint = DEFAULT_PEG_MIN,
+    pegMax: bigint = DEFAULT_PEG_MAX,
+    coinKIndex = 1,
+    maxBurnAmount?: bigint,
+  ): { burnAmount: bigint; tokenOut: bigint; canFulfill: boolean; maxTokenOutWithinPeg: bigint; priceAfter: bigint } {
+    assert(coinKIndex !== 0, "coinKIndex must not be 0");
+    assert(desiredTokenOut > 0n, "desiredTokenOut must be > 0");
+
+    const currentPrice = (): bigint => this.priceCoin0ToK_1e18(coinKIndex);
+    const maxBurn = maxBurnAmount ?? this.totalSupply;
+
+    // Helper to get price and burn amount for desired token output
+    const getPriceAndBurnForTokenOut = (targetOut: bigint): { price: bigint; burnAmount: bigint; actualOut: bigint } | null => {
+      const snap = this.snapshot();
+      try {
+        // Binary search for burn amount that gives us targetOut
+        let lo = 1n;
+        let hi = 1n;
+
+        const getOutForBurn = (burn: bigint): bigint => {
+          if (burn > maxBurn) return 0n;
+          return this.calcWithdrawOneCoin(burn, coinIndex);
+        };
+
+        // Expand hi until we get enough output
+        while (hi <= maxBurn && getOutForBurn(hi) < targetOut) {
+          hi *= 2n;
+        }
+
+        if (hi > maxBurn) {
+          if (getOutForBurn(maxBurn) < targetOut) return null;
+          hi = maxBurn;
+        }
+
+        // Binary search for minimum burn that gives targetOut
+        while (lo < hi) {
+          const mid = (lo + hi) / 2n;
+          if (getOutForBurn(mid) >= targetOut) hi = mid;
+          else lo = mid + 1n;
+        }
+
+        const burnAmount = lo;
+        const actualOut = this.removeLiquidityOneCoin(burnAmount, coinIndex);
+        return { price: currentPrice(), burnAmount, actualOut };
+      } catch {
+        return null;
+      } finally {
+        this.restore(snap);
+      }
+    };
+
+    // Check if desired output is achievable and within peg
+    const resultAtDesired = getPriceAndBurnForTokenOut(desiredTokenOut);
+
+    if (resultAtDesired && resultAtDesired.price >= pegMin && resultAtDesired.price <= pegMax) {
+      return {
+        burnAmount: resultAtDesired.burnAmount,
+        tokenOut: resultAtDesired.actualOut,
+        canFulfill: true,
+        maxTokenOutWithinPeg: resultAtDesired.actualOut,
+        priceAfter: resultAtDesired.price,
+      };
+    }
+
+    // Binary search for max token out within peg constraints
+    let lo = 1n;
+    let hi = desiredTokenOut;
+
+    const minResult = getPriceAndBurnForTokenOut(lo);
+    if (!minResult || minResult.price < pegMin || minResult.price > pegMax) {
+      return {
+        burnAmount: 0n,
+        tokenOut: 0n,
+        canFulfill: false,
+        maxTokenOutWithinPeg: 0n,
+        priceAfter: currentPrice(),
+      };
+    }
+
+    while (lo < hi) {
+      const mid = (lo + hi + 1n) / 2n;
+      const midResult = getPriceAndBurnForTokenOut(mid);
+
+      if (midResult && midResult.price >= pegMin && midResult.price <= pegMax) {
+        lo = mid;
+      } else {
+        hi = mid - 1n;
+      }
+    }
+
+    const finalResult = getPriceAndBurnForTokenOut(lo);
+    if (!finalResult) {
+      return {
+        burnAmount: 0n,
+        tokenOut: 0n,
+        canFulfill: false,
+        maxTokenOutWithinPeg: 0n,
+        priceAfter: currentPrice(),
+      };
+    }
+
+    return {
+      burnAmount: finalResult.burnAmount,
+      tokenOut: finalResult.actualOut,
+      canFulfill: false,
+      maxTokenOutWithinPeg: finalResult.actualOut,
+      priceAfter: finalResult.price,
+    };
   }
 }
