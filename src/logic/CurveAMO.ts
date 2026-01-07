@@ -8,6 +8,12 @@ type PriceOutput = {
   achievablePrice: bigint // if achievable = target -> solved, if not, partially solved
 }
 
+/**
+ * Algorithmic Market Operations (AMO) for Curve StableSwap pools.
+ * Extends CurveStableSwapNG with advanced solving capabilities to maintain target prices
+ * and peg ranges through swaps, liquidity additions/removals. Provides binary search-based
+ * solvers for price targeting, peg-constrained operations, and output-based calculations.
+ */
 export default class CurveAMO extends CurveStableSwapNG {
   /**
    * Solves for the amount of tokens to swap to bring price to target.

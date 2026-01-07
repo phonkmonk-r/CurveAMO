@@ -22,6 +22,11 @@ export interface FullPoolData {
   // metadata: PoolMetadata;
 }
 
+/**
+ * Reader for interacting with Curve StableSwap NG pool contracts.
+ * Provides methods to read pool parameters (A, fees, rates), current state (balances, supply),
+ * metadata (name, symbol, coins), and simulate operations (swaps, deposits, withdrawals).
+ */
 export class CurvePoolReader {
   private contract: Contract;
   public readonly provider: Provider;

@@ -18,6 +18,11 @@ export interface FxReaderAddressesParams {
     xToken: string
 }
 
+/**
+ * Reader for interacting with FX Protocol contracts.
+ * Provides methods to read treasury state, NAV values, collateral ratios,
+ * and token supplies for fToken and xToken.
+ */
 export class FxReader {
     private treasury: Contract;
     public readonly provider: Provider;
@@ -56,17 +61,11 @@ export class FxReader {
     }
 
     async getFTotalSupply(): Promise<bigint> {
-        if (!this.fTokenAddress) {
-            throw new Error("FxReader: fToken address not set");
-        }
         const fToken = new Contract(this.fTokenAddress, ERC20_ABI, this.provider);
         return await fToken.totalSupply();
     }
 
     async getXTotalSupply(): Promise<bigint> {
-        if (!this.xTokenAddress) {
-            throw new Error("FxReader: xToken address not set");
-        }
         const xToken = new Contract(this.xTokenAddress, ERC20_ABI, this.provider);
         return await xToken.totalSupply();
     }
