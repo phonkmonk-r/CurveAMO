@@ -1,6 +1,6 @@
 import { assert } from "node:console";
-import Constants from "./lib/Constants";
-import Helpers from "./lib/Helpers";
+import Constants from "../lib/Constants";
+import Helpers from "../lib/Helpers";
 
 export interface CurveStableSwapNGParams {
   n: number;                      // N_COINS

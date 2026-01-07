@@ -1,6 +1,6 @@
 import { Provider, JsonRpcProvider } from "ethers";
 import { CurvePoolReader, FullPoolData } from "./readers/CurvePoolReader";
-import CurveAMO from "./CurveAMO";
+import CurveAMO from "./logic/CurveAMO";
 import { RPCUrls } from "./lib/RPCUrls";
 
 /**

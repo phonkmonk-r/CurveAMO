@@ -1,7 +1,7 @@
 import { expect } from "chai";
-import CurveAMO from "../src/CurveAMO";
+import CurveAMO from "../src/logic/CurveAMO";
 import { ethers } from "ethers";
-import { CurveStableSwapNGParams } from "../src/CurveStableSwapNG";
+import { CurveStableSwapNGParams } from "../src/logic/CurveStableSwapNG";
 import Constants from "../src/lib/Constants";
 
 describe("Curve AMO", () => {

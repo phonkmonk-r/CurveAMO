@@ -1,5 +1,5 @@
 import { Contract, Provider, JsonRpcProvider } from "ethers";
-import { CurveStableSwapNGParams } from "../CurveStableSwapNG";
+import { CurveStableSwapNGParams } from "../logic/CurveStableSwapNG";
 import CurveStableSwapNGAbi from "../abi/CurveStableSwapNG.json";
 
 export interface PoolState {

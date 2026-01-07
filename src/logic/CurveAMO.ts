@@ -1,6 +1,6 @@
 import { assert } from "node:console";
 import { CurveStableSwapNG, CurveStableSwapNGParams } from "./CurveStableSwapNG"
-import Constants from "./lib/Constants";
+import Constants from "../lib/Constants";
 
 type PriceOutput = {
   currentPrice: bigint

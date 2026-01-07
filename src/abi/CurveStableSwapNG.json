@@ -1,0 +1,152 @@
+[
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "A",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "A_precise",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "fee",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "offpeg_fee_multiplier",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "balances",
+    "inputs": [{ "name": "i", "type": "uint256" }],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "admin_balances",
+    "inputs": [{ "name": "i", "type": "uint256" }],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "totalSupply",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "N_COINS",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "coins",
+    "inputs": [{ "name": "i", "type": "uint256" }],
+    "outputs": [{ "name": "", "type": "address" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "stored_rates",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256[]" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "get_balances",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256[]" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "get_dy",
+    "inputs": [
+      { "name": "i", "type": "int128" },
+      { "name": "j", "type": "int128" },
+      { "name": "dx", "type": "uint256" }
+    ],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "calc_token_amount",
+    "inputs": [
+      { "name": "_amounts", "type": "uint256[]" },
+      { "name": "_is_deposit", "type": "bool" }
+    ],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "calc_withdraw_one_coin",
+    "inputs": [
+      { "name": "_burn_amount", "type": "uint256" },
+      { "name": "i", "type": "int128" }
+    ],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "get_virtual_price",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "get_p",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256[]" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "D",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "name",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "string" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "symbol",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "string" }]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "decimals",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint8" }]
+  }
+]
