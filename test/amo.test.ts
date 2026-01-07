@@ -1,11 +1,11 @@
 import { expect } from "chai";
-import CurveAMO from "../src/logic/CurveAMO";
+import CurveLogic from "../src/logic/CurveLogic";
 import { ethers } from "ethers";
 import { CurveStableSwapNGParams } from "../src/logic/CurveStableSwapNG";
 import Constants from "../src/lib/Constants";
 
 describe("Curve AMO", () => {
-  let amo: CurveAMO
+  let amo: CurveLogic
   beforeEach(() => {
     const fee = 2_000_000n;
     const offpeg = 50_000_000_000n;
@@ -22,7 +22,7 @@ describe("Curve AMO", () => {
       offpegFeeMultiplier: offpeg,
       rates: [Constants.PRECISION, Constants.PRECISION],
     };
-    amo = new CurveAMO(params, [balance0, balance1], lpTotalSupply);
+    amo = new CurveLogic(params, [balance0, balance1], lpTotalSupply);
   })
 
   describe("De-peg", () => {

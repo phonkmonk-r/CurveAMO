@@ -1,15 +1,15 @@
 import { Provider, JsonRpcProvider } from "ethers";
 import { CurvePoolReader, FullPoolData } from "./readers/CurvePoolReader";
-import CurveAMO from "./logic/CurveAMO";
+import CurveLogic from "./logic/CurveLogic";
 import { RPCUrls } from "./lib/RPCUrls";
 
 /**
  * CurveState manages fetching and syncing on-chain Curve pool state
- * with the local CurveAMO simulation instance.
+ * with the local CurveLogic simulation instance.
  */
 export class CurveState {
   public readonly reader: CurvePoolReader;
-  private _amo: CurveAMO | null = null;
+  private _logic: CurveLogic | null = null;
   private _lastFetchedData: FullPoolData | null = null;
 
   constructor(poolAddress: string, provider: Provider) {
@@ -27,29 +27,29 @@ export class CurveState {
   }
 
   /**
-   * Fetch the latest pool state from chain and create a fresh CurveAMO instance
+   * Fetch the latest pool state from chain and create a fresh CurveLogic instance
    */
-  async sync(): Promise<CurveAMO> {
+  async sync(): Promise<CurveLogic> {
     const data = await this.reader.getFullPoolData();
     this._lastFetchedData = data;
 
-    this._amo = new CurveAMO(
+    this._logic = new CurveLogic(
       data.params,
       data.state.balances,
       data.state.totalSupply,
     );
 
-    return this._amo;
+    return this._logic;
   }
 
   /**
-   * Get the current CurveAMO instance (fetches if not yet initialized)
+   * Get the current CurveLogic instance (fetches if not yet initialized)
    */
-  async getAMO(): Promise<CurveAMO> {
-    if (!this._amo) {
+  async getLogic(): Promise<CurveLogic> {
+    if (!this._logic) {
       return this.sync();
     }
-    return this._amo;
+    return this._logic;
   }
 
   /**
@@ -60,9 +60,9 @@ export class CurveState {
   }
 
   /**
-   * Get the current CurveAMO instance (may be null if not synced)
+   * Get the current CurveLogic instance (may be null if not synced)
    */
-  get amo(): CurveAMO | null {
-    return this._amo;
+  get logic(): CurveLogic | null {
+    return this._logic;
   }
 }

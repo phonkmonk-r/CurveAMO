@@ -14,7 +14,7 @@ type PriceOutput = {
  * and peg ranges through swaps, liquidity additions/removals. Provides binary search-based
  * solvers for price targeting, peg-constrained operations, and output-based calculations.
  */
-export default class CurveAMO extends CurveStableSwapNG {
+export default class CurveLogic extends CurveStableSwapNG {
   /**
    * Solves for the amount of tokens to swap to bring price to target.
    * Automatically determines direction based on current vs target price.

@@ -248,7 +248,7 @@ export class CurvePoolReader {
   }
 
   /**
-   * Get all pool data needed to initialize a CurveStableSwapNG/CurveAMO instance
+   * Get all pool data needed to initialize a CurveStableSwapNG/CurveLogic instance
    */
   async getFullPoolData(): Promise<FullPoolData> {
     const [params, state] = await Promise.all([

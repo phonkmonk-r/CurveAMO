@@ -7,7 +7,7 @@ import { FxState } from "./FxState";
     const crvusd_pool_amo = CurveState.fromChainId("0xEcb0F0d68C19BdAaDAEbE24f6752A4Db34e2c2cb", 1);
     const time = Date.now()
     await crvusd_pool_amo.sync();
-    const amo = crvusd_pool_amo.amo;
+    const amo = crvusd_pool_amo.logic;
 
     const fxState = FxState.fromChainId({
         treasury: "0x51c4348af0c6066a2fd31bd968bc0c039fe27342", 
@@ -17,9 +17,9 @@ import { FxState } from "./FxState";
     await fxState.sync();
 
     console.log(fxState.lastFetchedData?.baseNav);
-    
 
-    console.log(crvusd_pool_amo?.amo?.solveOneSidedRemoveToTargetPrice(ethers.parseEther("0.999"), ethers.parseEther("500000")));
+
+    console.log(crvusd_pool_amo?.logic?.solveOneSidedRemoveToTargetPrice(ethers.parseEther("0.999"), ethers.parseEther("500000")));
     console.log(amo?.priceCoin0ToK_1e18(1))
 
     amo?.removeLiquidityOneCoin(28103989260682776152301n, 0)

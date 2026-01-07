@@ -9,7 +9,7 @@ import { RPCUrls } from "./lib/RPCUrls";
  */
 export class FxState {
     public readonly reader: FxReader;
-    private _fx: FxLogic | null = null;
+    private _logic: FxLogic | null = null;
     private _lastFetchedData: FxLogicParams | null = null;
 
     constructor(addresses: FxReaderAddressesParams, provider: Provider) {
@@ -33,19 +33,19 @@ export class FxState {
         const data = await this.reader.getParams();
         this._lastFetchedData = data;
 
-        this._fx = new FxLogic(data);
+        this._logic = new FxLogic(data);
 
-        return this._fx;
+        return this._logic;
     }
 
     /**
      * Get the current FxLogic instance (fetches if not yet initialized)
      */
-    async getFx(): Promise<FxLogic> {
-        if (!this._fx) {
+    async getLogic(): Promise<FxLogic> {
+        if (!this._logic) {
             return this.sync();
         }
-        return this._fx;
+        return this._logic;
     }
 
     /**
@@ -58,7 +58,7 @@ export class FxState {
     /**
      * Get the current FxLogic instance (may be null if not synced)
      */
-    get fx(): FxLogic | null {
-        return this._fx;
+    get logic(): FxLogic | null {
+        return this._logic;
     }
 }

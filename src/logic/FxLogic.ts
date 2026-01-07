@@ -13,6 +13,8 @@ export interface FxLogicParams {
  * Logic for FX Protocol collateral ratio management.
  * Provides methods to calculate the amount of fToken that needs to be burned
  * to achieve a target collateral ratio based on NAV values and token supplies.
+ * 
+ * NOTE: we are not simulating the Fx state off-chain.
  */
 export default class FxLogic {
     public readonly p: FxLogicParams;
