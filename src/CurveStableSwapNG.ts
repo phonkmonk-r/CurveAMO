@@ -1,10 +1,10 @@
 import { assert } from "node:console";
-import { ADMIN_FEE, A_PRECISION, FEE_DENOMINATOR, PRECISION, abs} from "./helpers";
-
+import Constants from "./lib/Constants";
+import Helpers from "./lib/Helpers";
 
 export interface CurveStableSwapNGParams {
   n: number;                      // N_COINS
-  amp: bigint;                    // A_precise() (already scaled by A_PRECISION in this contract)
+  amp: bigint;                    // A_precise() (already scaled by Constants.A_PRECISION in this contract)
   fee: bigint;                    // fee() (1e10 precision)
   offpegFeeMultiplier: bigint;    // offpeg_fee_multiplier() (1e10 precision)
   rates: bigint[];                // stored_rates() length n (1e18 precision multipliers)
@@ -64,19 +64,19 @@ export class CurveStableSwapNG {
     const b = balances ?? this.balances;
     const out: bigint[] = [];
     for (let i = 0; i < this.p.n; i++) {
-      out.push((this.p.rates[i] * b[i]) / PRECISION);
+      out.push((this.p.rates[i] * b[i]) / Constants.PRECISION);
     }
     return out;
   }
 
   private dynamicFee(xpi: bigint, xpj: bigint, baseFee: bigint): bigint {
     const offpeg = this.p.offpegFeeMultiplier;
-    if (offpeg <= FEE_DENOMINATOR) return baseFee;
+    if (offpeg <= Constants.FEE_DENOMINATOR) return baseFee;
 
     const xps2 = (xpi + xpj) ** 2n;
     const num = offpeg * baseFee;
     const den =
-      ((offpeg - FEE_DENOMINATOR) * 4n * xpi * xpj) / xps2 + FEE_DENOMINATOR;
+      ((offpeg - Constants.FEE_DENOMINATOR) * 4n * xpi * xpj) / xps2 + Constants.FEE_DENOMINATOR;
     return num / den;
   }
 
@@ -101,11 +101,11 @@ export class CurveStableSwapNG {
       DP = DP / nPowN;
 
       const Dprev = D;
-      const num = ((Ann * S) / A_PRECISION + DP * n) * D;
-      const den = ((Ann - A_PRECISION) * D) / A_PRECISION + (n + 1n) * DP;
+      const num = ((Ann * S) / Constants.A_PRECISION + DP * n) * D;
+      const den = ((Ann - Constants.A_PRECISION) * D) / Constants.A_PRECISION + (n + 1n) * DP;
       D = num / den;
 
-      if (abs(D - Dprev) <= 1n) return D;
+      if (Helpers.abs(D - Dprev) <= 1n) return D;
     }
     throw new Error("getD did not converge");
   }
@@ -129,14 +129,14 @@ export class CurveStableSwapNG {
       c = (c * D) / (_x * BigInt(n));
     }
 
-    c = (c * D * A_PRECISION) / (Ann * BigInt(n));
-    const b = S_ + (D * A_PRECISION) / Ann;
+    c = (c * D * Constants.A_PRECISION) / (Ann * BigInt(n));
+    const b = S_ + (D * Constants.A_PRECISION) / Ann;
     let y = D;
 
     for (let iter = 0; iter < 255; iter++) {
       const yPrev = y;
       y = (y * y + c) / (2n * y + b - D);
-      if (abs(y - yPrev) <= 1n) return y;
+      if (Helpers.abs(y - yPrev) <= 1n) return y;
     }
     throw new Error("getY did not converge");
   }
@@ -156,14 +156,14 @@ export class CurveStableSwapNG {
       c = (c * D) / (_x * BigInt(n));
     }
 
-    c = (c * D * A_PRECISION) / (Ann * BigInt(n));
-    const b = S_ + (D * A_PRECISION) / Ann;
+    c = (c * D * Constants.A_PRECISION) / (Ann * BigInt(n));
+    const b = S_ + (D * Constants.A_PRECISION) / Ann;
     let y = D;
 
     for (let iter = 0; iter < 255; iter++) {
       const yPrev = y;
       y = (y * y + c) / (2n * y + b - D);
-      if (abs(y - yPrev) <= 1n) return y;
+      if (Helpers.abs(y - yPrev) <= 1n) return y;
     }
     throw new Error("getY_D did not converge");
   }
@@ -186,11 +186,11 @@ export class CurveStableSwapNG {
       Dr = (Dr * D) / xp[k];
     }
 
-    const xp0_A = (ANN * xp[0]) / A_PRECISION;
+    const xp0_A = (ANN * xp[0]) / Constants.A_PRECISION;
 
     const out: bigint[] = [];
     for (let i = 1; i < n; i++) {
-      const num = PRECISION * (xp0_A + (Dr * xp[0]) / xp[i]);
+      const num = Constants.PRECISION * (xp0_A + (Dr * xp[0]) / xp[i]);
       const den = xp0_A + Dr;
       out.push(num / den);
     }
@@ -203,7 +203,7 @@ export class CurveStableSwapNG {
   priceCoin0ToK_1e18(k: number): bigint {
     assert(k >= 1 && k < this.p.n, "priceCoin0ToK_1e18: k out of range");
     const coin0PerK = this.getPRelativeToCoin0()[k - 1]; // dx0/dxk
-    return (PRECISION * PRECISION) / coin0PerK;
+    return (Constants.PRECISION * Constants.PRECISION) / coin0PerK;
   }
 
   private simulateExchange(i: number, j: number, dx: bigint): {
@@ -223,18 +223,18 @@ export class CurveStableSwapNG {
     const xp = this.xp(oldBal);
     const D = this.getD(xp, amp);
 
-    const x = xp[i] + (dx * rates[i]) / PRECISION;
+    const x = xp[i] + (dx * rates[i]) / Constants.PRECISION;
     const y = this.getY(i, j, x, xp, amp, D);
 
     let dy = xp[j] - y - 1n;
     const feeHere = this.dynamicFee((xp[i] + x) / 2n, (xp[j] + y) / 2n, this.p.fee);
-    const dyFee = (dy * feeHere) / FEE_DENOMINATOR;
+    const dyFee = (dy * feeHere) / Constants.FEE_DENOMINATOR;
 
     const dyNetXp = dy - dyFee;
-    const dyOut = (dyNetXp * PRECISION) / rates[j];
+    const dyOut = (dyNetXp * Constants.PRECISION) / rates[j];
 
-    const adminFeeXp = (dyFee * ADMIN_FEE) / FEE_DENOMINATOR;
-    const adminFeeReal = (adminFeeXp * PRECISION) / rates[j];
+    const adminFeeXp = (dyFee * Constants.ADMIN_FEE) / Constants.FEE_DENOMINATOR;
+    const adminFeeReal = (adminFeeXp * Constants.PRECISION) / rates[j];
 
     const newBal = oldBal.slice();
     const newAdmin = this.adminBalances.slice();
@@ -320,13 +320,13 @@ export class CurveStableSwapNG {
         const nb = newBalances[i];
         const diff = ideal > nb ? ideal - nb : nb - ideal;
 
-        const xs = (rates[i] * (oldBalances[i] + nb)) / PRECISION;
+        const xs = (rates[i] * (oldBalances[i] + nb)) / Constants.PRECISION;
         const dynFee = this.dynamicFee(xs, ys, baseFee);
 
-        const feeI = (dynFee * diff) / FEE_DENOMINATOR;
+        const feeI = (dynFee * diff) / Constants.FEE_DENOMINATOR;
         fees[i] = feeI;
 
-        const adminPart = (feeI * ADMIN_FEE) / FEE_DENOMINATOR;
+        const adminPart = (feeI * Constants.ADMIN_FEE) / Constants.FEE_DENOMINATOR;
         adminFees[i] = adminPart;
 
         newBalances[i] -= feeI;
@@ -417,13 +417,13 @@ export class CurveStableSwapNG {
       }
 
       const dynFee = this.dynamicFee(xavg, ys, baseFee);
-      xpReduced[j] = xpJ - (dynFee * dxExpected) / FEE_DENOMINATOR;
+      xpReduced[j] = xpJ - (dynFee * dxExpected) / Constants.FEE_DENOMINATOR;
     }
 
     const dyXp = xpReduced[i] - this.getY_D(amp, i, xpReduced, D1);
 
-    const dy0 = ((xp[i] - newY) * PRECISION) / rates[i];
-    const dy = ((dyXp - 1n) * PRECISION) / rates[i];
+    const dy0 = ((xp[i] - newY) * Constants.PRECISION) / rates[i];
+    const dy = ((dyXp - 1n) * Constants.PRECISION) / rates[i];
     const fee = dy0 - dy;
 
     if (dy < 0n || fee < 0n) throw new Error("calcWithdrawOneCoinQuote: negative result");
@@ -437,7 +437,7 @@ export class CurveStableSwapNG {
   removeLiquidityOneCoin(burnAmount: bigint, i: number): bigint {
     const { dy, fee } = this.calcWithdrawOneCoinQuote(burnAmount, i);
 
-    const adminPart = (fee * ADMIN_FEE) / FEE_DENOMINATOR;
+    const adminPart = (fee * Constants.ADMIN_FEE) / Constants.FEE_DENOMINATOR;
 
     this.totalSupply -= burnAmount;
 
@@ -482,13 +482,13 @@ export class CurveStableSwapNG {
       const nb = newBalances[i];
       const diff = ideal > nb ? ideal - nb : nb - ideal;
 
-      const xs = (rates[i] * (oldBalances[i] + nb)) / PRECISION;
+      const xs = (rates[i] * (oldBalances[i] + nb)) / Constants.PRECISION;
       const dynFee = this.dynamicFee(xs, ys, baseFee);
 
-      const feeI = (dynFee * diff) / FEE_DENOMINATOR;
+      const feeI = (dynFee * diff) / Constants.FEE_DENOMINATOR;
       fees[i] = feeI;
 
-      const adminPart = (feeI * ADMIN_FEE) / FEE_DENOMINATOR;
+      const adminPart = (feeI * Constants.ADMIN_FEE) / Constants.FEE_DENOMINATOR;
       adminFees[i] = adminPart;
 
       newBalances[i] -= feeI;

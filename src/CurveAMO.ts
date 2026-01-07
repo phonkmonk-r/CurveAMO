@@ -1,6 +1,6 @@
 import { assert } from "node:console";
 import { CurveStableSwapNG, CurveStableSwapNGParams } from "./CurveStableSwapNG"
-import { DEFAULT_PEG_MAX, DEFAULT_PEG_MIN } from "./helpers";
+import Constants from "./lib/Constants";
 
 type PriceOutput = {
   currentPrice: bigint
@@ -296,8 +296,8 @@ export default class CurveAMO extends CurveStableSwapNG {
     desiredDx: bigint,
     iIn: number,
     jOut: number,
-    pegMin: bigint = DEFAULT_PEG_MIN,
-    pegMax: bigint = DEFAULT_PEG_MAX,
+    pegMin: bigint = Constants.DEFAULT_PEG_MIN,
+    pegMax: bigint = Constants.DEFAULT_PEG_MAX,
     coinKIndex = 1,
   ): { maxDx: bigint; dy: bigint; constrained: boolean; priceAfter: bigint } {
     assert(coinKIndex !== 0, "coinKIndex must not be 0");
@@ -353,8 +353,8 @@ export default class CurveAMO extends CurveStableSwapNG {
   maxAddLiquidityWithinPeg(
     desiredAmount: bigint,
     coinIndex: number,
-    pegMin: bigint = DEFAULT_PEG_MIN,
-    pegMax: bigint = DEFAULT_PEG_MAX,
+    pegMin: bigint = Constants.DEFAULT_PEG_MIN,
+    pegMax: bigint = Constants.DEFAULT_PEG_MAX,
     coinKIndex = 1,
   ): { maxAmount: bigint; constrained: boolean; priceAfter: bigint; lpTokens: bigint } {
     assert(coinKIndex !== 0, "coinKIndex must not be 0");
@@ -412,8 +412,8 @@ export default class CurveAMO extends CurveStableSwapNG {
   maxRemoveLiquidityWithinPeg(
     desiredBurnAmount: bigint,
     coinIndex: number,
-    pegMin: bigint = DEFAULT_PEG_MIN,
-    pegMax: bigint = DEFAULT_PEG_MAX,
+    pegMin: bigint = Constants.DEFAULT_PEG_MIN,
+    pegMax: bigint = Constants.DEFAULT_PEG_MAX,
     coinKIndex = 1,
   ): { maxBurnAmount: bigint; constrained: boolean; priceAfter: bigint; tokenOut: bigint } {
     assert(coinKIndex !== 0, "coinKIndex must not be 0");
@@ -478,8 +478,8 @@ export default class CurveAMO extends CurveStableSwapNG {
     desiredDy: bigint,
     iIn: number,
     jOut: number,
-    pegMin: bigint = DEFAULT_PEG_MIN,
-    pegMax: bigint = DEFAULT_PEG_MAX,
+    pegMin: bigint = Constants.DEFAULT_PEG_MIN,
+    pegMax: bigint = Constants.DEFAULT_PEG_MAX,
     coinKIndex = 1,
     maxDx?: bigint,
   ): { dx: bigint; dy: bigint; canFulfill: boolean; maxDyWithinPeg: bigint; priceAfter: bigint } {
@@ -607,8 +607,8 @@ export default class CurveAMO extends CurveStableSwapNG {
   solveAddLiquidityForLpTokens(
     desiredLpTokens: bigint,
     coinIndex: number,
-    pegMin: bigint = DEFAULT_PEG_MIN,
-    pegMax: bigint = DEFAULT_PEG_MAX,
+    pegMin: bigint = Constants.DEFAULT_PEG_MIN,
+    pegMax: bigint = Constants.DEFAULT_PEG_MAX,
     coinKIndex = 1,
     maxAmount?: bigint,
   ): { amount: bigint; lpTokens: bigint; canFulfill: boolean; maxLpWithinPeg: bigint; priceAfter: bigint } {
@@ -745,8 +745,8 @@ export default class CurveAMO extends CurveStableSwapNG {
   solveRemoveLiquidityForTokenOut(
     desiredTokenOut: bigint,
     coinIndex: number,
-    pegMin: bigint = DEFAULT_PEG_MIN,
-    pegMax: bigint = DEFAULT_PEG_MAX,
+    pegMin: bigint = Constants.DEFAULT_PEG_MIN,
+    pegMax: bigint = Constants.DEFAULT_PEG_MAX,
     coinKIndex = 1,
     maxBurnAmount?: bigint,
   ): { burnAmount: bigint; tokenOut: bigint; canFulfill: boolean; maxTokenOutWithinPeg: bigint; priceAfter: bigint } {
